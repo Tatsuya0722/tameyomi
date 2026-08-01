@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ためよみ！</title>
+  <style>
+    /* ── 基本レイアウト ───────────────────────────── */
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; max-width: 100%; overflow: hidden; }
+    body {
+      min-width: 0;
+      margin: 0;
+      background: #f2f5f8;
+      color: #1c2637;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-weight: 1000;
+      text-align: center;
+    }
+    #fit {
+      display: grid;
+      height: 100svh;
+      min-height: 100svh;
+      place-items: center;
+      overflow: hidden;
+    }
+    main {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      max-width: 900px;
+      height: 100svh;
+      min-height: 0;
+      margin: auto;
+      padding: 100px 12px 10px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid #d8e0ea;
+      border-radius: 24px;
+      box-shadow: 0 1px 0 #fff inset;
+    }
+
+    /* ── 気力表示 ────────────────────────────────── */
+    .board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .side { min-width: 0; padding: 18px 18px 16px; border: 1px solid; border-radius: 21px; }
+    .human { background: #e4f5ef; border-color: #b9e2d1; }
+    .cpu { background: #e8f2fc; border-color: #c8dff5; }
+    .side h2, .who { margin: 0; color: #6c7f96; font-size: 21px; }
+    .points { margin: 5px 0 8px; color: #6d7f94; font-size: 21px; }
+    .point-label { font-size: 24px; }
+    .points b { display: inline-block; width: 2ch; margin-left: 8px; color: #182434; font-size: 40px; line-height: 1; text-align: left; vertical-align: -3px; }
+
+    /* ── 手と結果 ────────────────────────────────── */
+    .middle { position: relative; display: grid; grid-template-rows: 150px 38px auto; min-height: 244px; place-content: center; gap: 8px; }
+    .duel { display: grid; grid-template-columns: 112px 64px 112px; align-items: center; justify-content: center; min-height: 150px; }
+    .move { display: grid; min-width: 0; min-height: 140px; align-content: center; justify-items: center; }
+    .icon { font-size: 67px; line-height: 1; filter: drop-shadow(0 2px 1px #9daabd88); }
+    .move-name { font-size: 28px; line-height: 1.15; }
+    .question { color: #e93a56; font-size: 78px; line-height: .9; }
+    .vs { color: #72839a; font-size: 28px; }
+    .notice, .result { grid-row: 2; grid-column: 1; min-height: 34px; }
+    .notice { color: #718298; font-size: 22px; }
+    .result { z-index: 1; color: #d95061; font-size: 26px; pointer-events: none; }
+    .result.player-win { color: #239f72; }
+    .result.cpu-win { color: #d95061; }
+
+    /* ── 行動ボタンと戦績 ────────────────────────── */
+    .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: auto; }
+    .action {
+      min-width: 0;
+      min-height: 132px;
+      padding: 14px 8px 12px;
+      background: #fff;
+      border: 1px solid #d8e0ea;
+      border-radius: 21px;
+      color: #1d2737;
+      font: inherit;
+      font-size: 24px;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform .07s ease, filter .07s ease, opacity .07s ease, box-shadow .07s ease;
+    }
+    .action .icon { display: block; margin-bottom: 7px; font-size: 44px; }
+    .action[data-action="charge"] { border-color: #b9e2d1; }
+    .action[data-action="defense"] { border-color: #c7dff6; }
+    .action[data-action="attack"] { border-color: #f5d4d8; }
+    .action:hover:not(:disabled) { box-shadow: 0 5px 14px #87a0bc2b; filter: brightness(1.02); }
+    .action:active:not(:disabled) { transform: scale(.965); filter: brightness(.95); }
+    .action:disabled { opacity: .28; }
+    .score { display: grid; grid-template-columns: 7ch 2.2ch 7ch; align-items: center; justify-content: center; margin: 14px 0 4px; color: #60738c; font-size: 18px; }
+    .score span { display: inline-block; }
+    #wins { text-align: right; }
+    #losses { text-align: left; }
+    .score-dot { text-align: center; }
+    .next {
+      position: absolute;
+      z-index: 5;
+      left: 50%;
+      top: 100%;
+      min-width: 230px;
+      margin: 0;
+      padding: 22px 34px;
+      background: #337abf;
+      border: 1px solid #c8dff5;
+      border-radius: 22px;
+      box-shadow: 0 12px 30px #526b8738;
+      color: #fff;
+      font: inherit;
+      font-size: 25px;
+      transform: translateX(-50%);
+      touch-action: manipulation;
+    }
+
+    /* ── ポップと気力変化の演出 ──────────────────── */
+    .pop, .result.win { animation: pop .19s ease-out; }
+    .gain { animation: gain .24s ease-out; }
+    .loss { animation: loss .24s ease-out; }
+    @keyframes pop { 50% { transform: scale(1.12); } }
+    @keyframes gain { 50% { color: #229c70; transform: scale(1.12); } }
+    @keyframes loss { 50% { color: #d64c5d; transform: scale(1.12); } }
+
+    /* ── メニューと情報パネル ────────────────────── */
+    .guide { position: absolute; z-index: 7; top: 16px; right: 16px; display: flex; }
+    .guide button {
+      padding: 6px 13px;
+      background: #fff;
+      border: 1px solid #c8dff5;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px #526b871c;
+      color: #60758f;
+      font: 800 13px system-ui, -apple-system, "Segoe UI", sans-serif;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .guide button:hover { color: #42627f; background: #f7fbff; }
+    button:focus-visible { outline: 3px solid #77ade0; outline-offset: 2px; }
+    dialog { width: min(500px, calc(100vw - 30px)); border: 1px solid #d8e0ea; border-radius: 18px; color: #1c2637; font: 700 18px system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.65; }
+    dialog::backdrop { background: #1c263755; }
+    dialog h2 { margin: 0 0 8px; color: #526b87; font-size: 28px; }
+    .menu-list { display: grid; gap: 9px; margin: 15px auto; }
+    .menu-list button { padding: 9px 30px; background: #fff; border: 1px solid #c8dff5; border-radius: 12px; color: #526b87; font: inherit; }
+    /* CPU仕様は内容を保持したまま、通常メニューでは非表示にしている。 */
+    .panel-with-back { position: relative; padding-bottom: 72px; }
+    .panel-with-back .panel-scroll { padding-bottom: 12px; }
+    .panel-back { position: absolute; z-index: 2; right: 16px; bottom: 12px; padding: 8px 24px; background: rgba(255,255,255,.78); border: 1px solid #c8dff5; border-radius: 12px; backdrop-filter: blur(1px); color: #526b87; font: 800 14px system-ui, -apple-system, "Segoe UI", sans-serif; cursor: pointer; }
+    .panel-back:active { transform: scale(.96); }
+
+    /* ── ルール・ヒント ──────────────────────────── */
+    .rules-grid { display: grid; width: max-content; margin: 0 auto; grid-template-columns: 2em 3em 1em auto; gap: 2px 7px; align-items: center; text-align: left; font-size: 24px; }
+    .rules-grid span:nth-child(4n+1), .rules-grid span:nth-child(4n+2), .rules-grid span:nth-child(4n+3) { text-align: center; }
+    .rules-grid > span:nth-child(4n+1) { font-size: 1.584em; }
+    .gain-text { color: #229c70; }
+    .spend-text { color: #d64c5d; }
+    .hint-cycle { position: relative; width: 280px; height: 200px; margin: 14px auto 4px; }
+    .hint-cycle span { position: absolute; display: grid; justify-items: center; font-size: 54px; font-style: normal; }
+    .hint-cycle b { font-size: 18px; }
+    .hint-charge { top: 0; left: 50%; transform: translateX(-50%); }
+    .hint-defense { bottom: 0; left: 15px; }
+    .hint-attack { right: 15px; bottom: 0; }
+    .hint-arrow { position: absolute; font: 1000 49px/1 Arial, sans-serif; font-style: normal; }
+    .arrow-charge-defense { top: 55px; left: 62px; color: #69bb9a; transform: rotate(135deg); }
+    .arrow-defense-attack { bottom: 18px; left: 113px; color: #77ade0; }
+    .arrow-attack-charge { top: 55px; right: 62px; color: #df9aa5; transform: rotate(-135deg); }
+
+    /* ── CPU仕様（マニア向け） ───────────────────── */
+    /* ── 端末幅への適応 ───────────────────────────── */
+    @media (max-width: 520px) {
+      main { min-height: 100svh; padding: 100px 10px 10px; border-width: 0; border-radius: 0; }
+      .board { gap: 10px; }
+      .side { padding: 12px 6px; }
+      .side h2 { font-size: 18px; }
+      .points { font-size: 18px; }
+      .point-label { font-size: 20px; }
+      .points b { font-size: 34px; }
+      .middle { min-height: 214px; }
+      .duel { grid-template-columns: 94px 42px 94px; }
+      .icon { font-size: 56px; }
+      .move-name { font-size: 23px; }
+      .question { font-size: 63px; }
+      .vs { font-size: 22px; }
+      .action { min-height: 112px; font-size: 20px; }
+      .action .icon { font-size: 39px; }
+      .notice { font-size: 19px; }
+      .result { font-size: 23px; }
+    }
+    @media (max-width: 319px) {
+      #fit.tiny { place-items: center start; }
+      #fit.tiny main { width: 320px; min-width: 320px; transform-origin: left center; }
+    }
+    #fit.scaled main { transform: scale(var(--fit, 1)); transform-origin: center center; }
+    #fit.tiny.scaled main { transform-origin: left center; }
+    @media (hover: none) and (pointer: coarse) and (min-width: 521px) and (max-width: 1100px) {
+      main { padding-top: 110px; }
+      .actions { margin-top: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="fit">
+    <main>
+      <div class="board">
+        <section class="side human"><h2>あなた</h2><div class="points"><span class="point-label">気力</span> <b id="human-energy">0</b></div></section>
+        <section class="side cpu"><h2>CPU</h2><div class="points"><span class="point-label">気力</span> <b id="cpu-energy">0</b></div></section>
+      </div>
+      <section class="middle">
+        <div class="duel"><div class="move" id="human-move"></div><div class="vs">VS</div><div class="move" id="cpu-move"></div></div>
+        <div class="notice" id="notice">手を選んでください</div>
+        <div class="result" id="result"></div>
+        <button class="next" id="next-game" hidden>次のゲーム</button>
+      </section>
+      <div class="actions">
+        <button class="action" data-action="charge"><span class="icon">🔋</span>ため</button>
+        <button class="action" data-action="defense"><span class="icon">🛡️</span>防御</button>
+        <button class="action" data-action="attack"><span class="icon">⚔️</span>攻撃</button>
+      </div>
+      <p class="score"><span id="wins">勝ち 0</span><span class="score-dot">・</span><span id="losses">負け 0</span></p>
+      <nav class="guide"><button id="open-menu">メニュー</button></nav>
+    </main>
+  </div>
+  <dialog id="information"></dialog>
+
+  <script>
+    "use strict";
+
+    /* ── 定数と圧縮済み通常表 ────────────────────── */
+    const GAME_CAP = 99;
+    const CPU_POLICY_URL = "tameyomi-cpu-99-2d3d-f64.bin";
+    const CPU_FILE_HEADER_BYTES = 64;
+    const CPU_FILE_MAGIC = "TYCPU99\0";
+    const CPU_FILE_VERSION = 1;
+    const ANIMATION_SPEED = 2;
+
+    const ACTION = Object.freeze({ ATTACK: 0, DEFENSE: 1, CHARGE: 2 });
+    const ACTION_NAMES = ["攻撃", "防御", "ため"];
+    const ACTION_ICONS = ["⚔️", "🛡️", "🔋"];
+
+    const $ = id => document.getElementById(id);
+    const actionButtons = [...document.querySelectorAll("[data-action]")];
+    const actionByName = Object.freeze({
+      attack: ACTION.ATTACK,
+      defense: ACTION.DEFENSE,
+      charge: ACTION.CHARGE,
+    });
+    const wait = (callback, milliseconds) =>
+      setTimeout(callback, milliseconds / ANIMATION_SPEED);
+
+    /* ── Game state ─────────────────────────────────────────── */
+    let humanEnergy = 0;
+    let humanPeakEnergy = 0;
+    let cpuEnergy = 0;
+    let gameEnded = false;
+    let animationRunning = false;
+    let nextGameReady = false;
+    let wins = 0;
+    let losses = 0;
+
+    // The CPU is sampled before the player taps. This is the no-after-the-fact guarantee.
+    let queuedCpuAction;
+    let cpuPolicyData = null;
+    let cpuReady = false;
+
+    function validActions(energy) {
+      return [energy > 1, energy > 0, energy < GAME_CAP];
+    }
+
+    function energyChange(action) {
+      if (action === ACTION.ATTACK) return -2;
+      if (action === ACTION.DEFENSE) return -1;
+      return 1;
+    }
+
+    function isHumanGuaranteedWinner(cpu, human) {
+      return human >= 2 * cpu + 2;
+    }
+
+    function readCpuFileMagic(buffer) {
+      return String.fromCharCode(...new Uint8Array(buffer, 0, 8));
+    }
+
+    /*
+     * 圧縮された方針表へ直接アクセスする添字を作る。
+     * normalOffsets[c] は2D表の最初の (CPU気力c, 人間気力h) 行を指す。
+     * 3D表は (CPU気力, 人間気力, 人間最高気力) の順に連続格納しているため、
+     * forcedOffsets[c * 100 + h] から人間最高気力 h の行を指し、m - h 行だけ進める。
+     */
+    function buildPolicyIndexes(normalStateCount, forcedStateCount) {
+      const normalOffsets = new Uint32Array(GAME_CAP + 1);
+      const forcedOffsets = new Uint32Array((GAME_CAP + 1) ** 2);
+      let normalIndex = 0;
+      let forcedIndex = 0;
+
+      for (let cpu = 0; cpu <= GAME_CAP; cpu++) {
+        normalOffsets[cpu] = normalIndex;
+
+        for (let human = 0; human <= GAME_CAP; human++) {
+          if (isHumanGuaranteedWinner(cpu, human)) {
+            forcedOffsets[cpu * (GAME_CAP + 1) + human] = forcedIndex;
+            forcedIndex += GAME_CAP - human + 1;
+          } else {
+            normalIndex++;
+          }
+        }
+      }
+
+      if (normalIndex !== normalStateCount || forcedIndex !== forcedStateCount) {
+        throw Error("CPU table has an unexpected state count");
+      }
+      return { normalOffsets, forcedOffsets };
+    }
+
+    async function loadCpuPolicy() {
+      const response = await fetch(CPU_POLICY_URL);
+      if (!response.ok) throw Error("CPU table could not be downloaded");
+
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength < CPU_FILE_HEADER_BYTES) throw Error("CPU table is too short");
+
+      const header = new DataView(buffer);
+      const version = header.getUint32(8, true);
+      const gameCap = header.getUint32(12, true);
+      const normalStateCount = header.getUint32(16, true);
+      const forcedStateCount = header.getUint32(20, true);
+      const normalOffset = header.getUint32(24, true);
+      const forcedOffset = header.getUint32(28, true);
+      const declaredBytes = header.getUint32(32, true);
+
+      if (readCpuFileMagic(buffer) !== CPU_FILE_MAGIC) throw Error("CPU table magic does not match");
+      if (version !== CPU_FILE_VERSION) throw Error("CPU table version does not match");
+      if (gameCap !== GAME_CAP) throw Error("CPU table uses a different energy cap");
+      if (declaredBytes !== buffer.byteLength) throw Error("CPU table size does not match");
+      if (normalOffset !== CPU_FILE_HEADER_BYTES) throw Error("CPU normal table offset is invalid");
+      if (forcedOffset !== normalOffset + normalStateCount * 16) {
+        throw Error("CPU forced table offset is invalid");
+      }
+      if (forcedOffset + forcedStateCount * 16 !== buffer.byteLength) {
+        throw Error("CPU table length is invalid");
+      }
+
+      const indexes = buildPolicyIndexes(normalStateCount, forcedStateCount);
+
+      // binには攻撃・防御だけをFloat64で保存する。
+      // ための確率は 1 - 攻撃 - 防御 で復元する。
+      return {
+        normalProbabilities: new Float64Array(buffer, normalOffset, normalStateCount * 2),
+        forcedProbabilities: new Float64Array(buffer, forcedOffset, forcedStateCount * 2),
+        ...indexes,
+      };
+    }
+
+    /*
+     * 通常局面は勝敗均衡の2D方針を使う。
+     * 人間必勝局面だけ、最高気力を抑える3D方針を使う。
+     */
+    function cpuPolicy() {
+      const cpu = cpuEnergy;
+      const human = humanEnergy;
+      const peak = humanPeakEnergy;
+
+      if (isHumanGuaranteedWinner(cpu, human)) {
+        const stateOffset = cpuPolicyData.forcedOffsets[cpu * (GAME_CAP + 1) + human];
+        const probabilityOffset = (stateOffset + peak - human) * 2;
+        const attack = cpuPolicyData.forcedProbabilities[probabilityOffset];
+        const defense = cpuPolicyData.forcedProbabilities[probabilityOffset + 1];
+        return [attack, defense, 1 - attack - defense];
+      }
+
+      const stateOffset = cpuPolicyData.normalOffsets[cpu];
+      const probabilityOffset = (stateOffset + human) * 2;
+      const attack = cpuPolicyData.normalProbabilities[probabilityOffset];
+      const defense = cpuPolicyData.normalProbabilities[probabilityOffset + 1];
+      return [attack, defense, 1 - attack - defense];
+    }
+
+    function sampleCpuAction() {
+      const probabilities = cpuPolicy();
+      const total = probabilities[0] + probabilities[1] + probabilities[2];
+      const randomPoint = Math.random() * total;
+
+      if (randomPoint < probabilities[0]) return ACTION.ATTACK;
+      if (randomPoint < probabilities[0] + probabilities[1]) return ACTION.DEFENSE;
+      return ACTION.CHARGE;
+    }
+
+    /* ── 表示 ─────────────────────────────────────── */
+    function showMove(elementId, action, playerName) {
+      $(elementId).innerHTML =
+        '<span class="who">' + playerName + '</span>' +
+        '<span class="icon">' + ACTION_ICONS[action] + '</span>' +
+        '<span class="move-name">' + ACTION_NAMES[action] + '</span>';
+    }
+
+    function showUnknownMoves() {
+      const question = '<span class="question">?</span><span class="move-name">...</span>';
+      $("human-move").innerHTML = '<span class="who">あなた</span>' + question;
+      $("cpu-move").innerHTML = '<span class="who">CPU</span>' + question;
+    }
+
+    function restartAnimation(elementId, className) {
+      const element = $(elementId);
+      element.classList.remove("pop", "gain", "loss", "win");
+      void element.offsetWidth;
+      element.classList.add(className);
+    }
+
+    function draw() {
+      $("human-energy").textContent = humanEnergy;
+      $("cpu-energy").textContent = cpuEnergy;
+      $("wins").textContent = "勝ち " + wins;
+      $("losses").textContent = "負け " + losses;
+
+      const allowedHumanActions = validActions(humanEnergy);
+      actionButtons.forEach(button => {
+        const action = actionByName[button.dataset.action];
+        button.disabled = !cpuReady || gameEnded || animationRunning || !allowedHumanActions[action];
+      });
+      $("next-game").hidden = !gameEnded || !nextGameReady;
+    }
+
+    /* ── 一ラウンドの演出 ─────────────────────────── */
+    function endGame(playerWon) {
+      gameEnded = true;
+      animationRunning = false;
+      nextGameReady = false;
+
+      const result = $("result");
+      result.className = "result " + (playerWon ? "player-win" : "cpu-win");
+      result.textContent = playerWon ? "あなたの勝ち！🎉" : "CPUの勝ち...😢";
+      $("notice").textContent = "";
+      restartAnimation("result", "win");
+      draw();
+
+      wait(() => {
+        if (playerWon) wins++;
+        else losses++;
+        draw();
+        restartAnimation(playerWon ? "wins" : "losses", playerWon ? "gain" : "loss");
+        wait(() => { nextGameReady = true; draw(); }, 2000);
+      }, 1000);
+    }
+
+    function resolveRound(humanAction, cpuAction) {
+      // Only attack vs charge ends the game. true means the player wins.
+      const terminalResult =
+        cpuAction === ACTION.ATTACK && humanAction === ACTION.CHARGE ? false :
+        cpuAction === ACTION.CHARGE && humanAction === ACTION.ATTACK ? true :
+        null;
+      const humanChanges = humanAction === ACTION.ATTACK ? [-1, -1] : [energyChange(humanAction)];
+      const cpuChanges = cpuAction === ACTION.ATTACK ? [-1, -1] : [energyChange(cpuAction)];
+
+      function finishRound() {
+        wait(() => {
+          if (terminalResult !== null) return endGame(terminalResult);
+          queuedCpuAction = sampleCpuAction();
+          animationRunning = false;
+          $("notice").textContent = "勝負つかず。続行";
+          draw();
+        }, 700);
+      }
+
+      function applyCpuEnergyChange(changeIndex = 0) {
+        if (changeIndex >= cpuChanges.length) return finishRound();
+        const change = cpuChanges[changeIndex];
+        cpuEnergy += change;
+        $("notice").textContent = "";
+        draw();
+        restartAnimation("cpu-energy", change > 0 ? "gain" : "loss");
+        wait(() => applyCpuEnergyChange(changeIndex + 1), 400);
+      }
+
+      function showCpuMove() {
+        showMove("cpu-move", cpuAction, "CPU");
+        restartAnimation("cpu-move", "pop");
+        wait(() => applyCpuEnergyChange(), 800);
+      }
+
+      function applyHumanEnergyChange(changeIndex = 0) {
+        if (changeIndex >= humanChanges.length) return wait(showCpuMove, 700);
+        const change = humanChanges[changeIndex];
+        humanEnergy += change;
+        humanPeakEnergy = Math.max(humanPeakEnergy, humanEnergy);
+        $("notice").textContent = "";
+        draw();
+        restartAnimation("human-energy", change > 0 ? "gain" : "loss");
+        wait(() => applyHumanEnergyChange(changeIndex + 1), 400);
+      }
+
+      showMove("human-move", humanAction, "あなた");
+      restartAnimation("human-move", "pop");
+      $("notice").textContent = "";
+      wait(() => applyHumanEnergyChange(), 800);
+    }
+
+    function play(humanAction) {
+      if (!cpuReady || gameEnded || animationRunning || !validActions(humanEnergy)[humanAction]) return;
+      const cpuAction = queuedCpuAction;
+      animationRunning = true;
+      showUnknownMoves();
+      $("notice").textContent = "";
+      $("result").textContent = "";
+      draw();
+      wait(() => resolveRound(humanAction, cpuAction), 500);
+    }
+
+    function startNewGame() {
+      humanEnergy = 0;
+      humanPeakEnergy = 0;
+      cpuEnergy = 0;
+      gameEnded = false;
+      animationRunning = false;
+      nextGameReady = false;
+      queuedCpuAction = sampleCpuAction();
+      showUnknownMoves();
+      $("notice").textContent = "手を選んでください";
+      $("result").textContent = "";
+      draw();
+    }
+
+    /* ── メニュー ────────────────────────────────── */
+    const panel = $("information");
+    const backMarker = '<span class="has-back"></span>';
+
+    function openPanel(content, afterOpen) {
+      const hasBackButton = content.includes("has-back");
+      panel.className = hasBackButton ? "panel-with-back" : "";
+      panel.innerHTML = hasBackButton
+        ? '<div class="panel-scroll">' + content + '</div><button class="panel-back">もどる</button>'
+        : content + '<p><button class="panel-close">閉じる</button></p>';
+      if (!panel.open) panel.showModal();
+      // Browsers may focus the first button when a dialog opens. Remove that
+      // automatic focus rather than moving it to the dialog, which can make
+      // the whole panel receive a mobile browser focus ring.
+      requestAnimationFrame(() => document.activeElement?.blur());
+      const closeButton = panel.querySelector(".panel-close");
+      if (closeButton) closeButton.onclick = () => panel.close();
+      if (afterOpen) afterOpen();
+    }
+
+    function bindBackButton() { panel.querySelector(".panel-back").onclick = openMenu; }
+
+    function openMenu() {
+      openPanel(
+        '<h2>メニュー</h2>' +
+        '<div class="menu-list">' +
+        '<button id="menu-rules">ルール</button>' +
+        '<button id="menu-hint">ヒント</button>' +
+        '</div>',
+        () => {
+          $("menu-rules").onclick = openRules;
+          $("menu-hint").onclick = openHint;
+        },
+      );
+    }
+
+    function openRules() {
+      openPanel(
+        '<h2>ルール</h2>' +
+        '<div class="rules-grid">' +
+        '<span>🔋</span><span>ため</span><span>：</span><span>気力が<span class="gain-text">1増える</span></span>' +
+        '<span>🛡️</span><span>防御</span><span>：</span><span>気力を<span class="spend-text">1使う</span></span>' +
+        '<span>⚔️</span><span>攻撃</span><span>：</span><span>気力を<span class="spend-text">2使う</span></span>' +
+        '</div>' +
+        '<p>攻撃とためがぶつかったときだけ勝負がつきます。それ以外は気力を増減して続行します。気力が足りない手は選べません。</p>' +
+        backMarker,
+        bindBackButton,
+      );
+    }
+
+    function openHint() {
+      openPanel(
+        '<h2>ヒント</h2>' +
+        '<div class="hint-cycle">' +
+        '<span class="hint-charge">🔋<b>ため</b></span>' +
+        '<span class="hint-defense">🛡️<b>防御</b></span>' +
+        '<span class="hint-attack">⚔️<b>攻撃</b></span>' +
+        '<i class="hint-arrow arrow-charge-defense">➜</i>' +
+        '<i class="hint-arrow arrow-defense-attack">➜</i>' +
+        '<i class="hint-arrow arrow-attack-charge">➜</i>' +
+        '</div><p>矢印の先の手に強い。</p>' + backMarker,
+        bindBackButton,
+      );
+    }
+
+    /* ── 入力・初期化 ────────────────────────────── */
+    actionButtons.forEach(button => {
+      button.onclick = () => play(actionByName[button.dataset.action]);
+    });
+    $("next-game").onclick = startNewGame;
+    $("open-menu").onclick = openMenu;
+
+    // Keep pinch zoom available, but prevent accidental rapid double-tap zoom during play.
+    let previousTapTime = 0;
+    document.addEventListener("touchend", event => {
+      const now = Date.now();
+      if (now - previousTapTime < 320) event.preventDefault();
+      previousTapTime = now;
+    }, { passive: false });
+
+    function fitGameToViewport() {
+      const fit = $("fit");
+      const game = document.querySelector("main");
+      const width = fit.clientWidth;
+      const height = window.visualViewport?.height ?? window.innerHeight;
+
+      // Measure the page at normal size before deciding how much to scale it.
+      fit.classList.toggle("tiny", width < 320);
+      fit.classList.remove("scaled");
+
+      const horizontalScale = Math.min(1, width / 320);
+      const verticalScale = Math.min(1, height / game.scrollHeight);
+      const scale = Math.min(horizontalScale, verticalScale);
+
+      document.documentElement.style.setProperty("--fit", scale);
+      fit.classList.toggle("scaled", scale < 1);
+    }
+    fitGameToViewport();
+    addEventListener("resize", fitGameToViewport);
+    window.visualViewport?.addEventListener("resize", fitGameToViewport);
+
+    async function initializeGame() {
+      showUnknownMoves();
+      $("notice").textContent = "CPUを準備中…";
+      draw();
+
+      try {
+        cpuPolicyData = await loadCpuPolicy();
+        cpuReady = true;
+        startNewGame();
+      } catch (error) {
+        console.error(error);
+        const openedFromFile = location.protocol === "file:";
+        $("notice").textContent = openedFromFile
+          ? "CPUデータを読むにはサーバー経由で開いてください"
+          : "CPUデータの読み込みに失敗しました";
+        draw();
+      }
+    }
+
+    initializeGame();
+  </script>
+</body>
+</html>
